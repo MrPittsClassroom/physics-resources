@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dose Limit: a nuclear radiation adventure</title>
+<style>
+:root {
+  --paper: #e6e9ec;
+  --card: #ffffff;
+  --ink: #12171c;
+  --steel: #56636d;
+  --line: #c9d0d6;
+  --signal: #ffc800;
+  --green: #14804a;
+  --green-bg: #e3f4ea;
+  --red: #c62d1f;
+  --red-bg: #fbe6e3;
+  --amber: #b86e00;
+  --ui: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --story: Georgia, "Times New Roman", serif;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 17px;
+  line-height: 1.5;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+/* Dosimeter bar */
+.hud {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--ink); color: #fff;
+  border-bottom: 4px solid var(--signal);
+}
+.hud-inner { max-width: 760px; margin: 0 auto; padding: 10px 16px 12px; }
+.hud-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.hud-dose { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.01em; color: var(--signal); font-variant-numeric: tabular-nums; }
+.hud-dose small { font-size: 0.85rem; font-weight: 600; color: #cfd6dc; letter-spacing: 0; }
+.hud-meta { font-size: 0.85rem; color: #cfd6dc; }
+.hud-meta button { background: none; border: 0; padding: 0 0 0 12px; text-decoration: underline; cursor: pointer; color: #cfd6dc; }
+.gauge { position: relative; height: 16px; margin-top: 8px; background: #2b343c; border-radius: 2px; overflow: hidden; }
+.gauge-fill { height: 100%; width: 0; background: var(--green); transition: width .6s ease, background-color .3s; }
+.gauge.amber .gauge-fill { background: #e59a00; }
+.gauge.red .gauge-fill, .gauge.over .gauge-fill {
+  background: repeating-linear-gradient(-45deg, var(--red) 0 10px, #12171c 10px 20px);
+}
+.ticks { position: absolute; inset: 0; pointer-events: none; }
+.ticks i { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.55); }
+.scale { position: relative; height: 16px; margin-top: 2px; font-size: 0.72rem; color: #a9b4bc; font-variant-numeric: tabular-nums; }
+.scale span { position: absolute; transform: translateX(-50%); }
+.scale span:first-child { transform: none; }
+.scale span:last-child { transform: translateX(-100%); }
+
+/* Layout */
+main { max-width: 760px; margin: 0 auto; padding: 20px 16px 64px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 22px 20px; }
+.kicker { margin: 0 0 6px; font-size: 0.9rem; font-weight: 700; color: var(--steel); }
+h1, h2 { line-height: 1.15; margin: 0 0 14px; letter-spacing: -0.015em; }
+h1 { font-size: 2.6rem; font-weight: 900; }
+h2 { font-size: 1.7rem; font-weight: 800; }
+h1:focus, h2:focus { outline: none; }
+.story p { font-family: var(--story); font-size: 1.1rem; line-height: 1.65; margin: 0 0 14px; max-width: 62ch; }
+.lead { font-family: var(--story); font-size: 1.2rem; line-height: 1.6; max-width: 58ch; }
+.hazard { height: 10px; margin: -22px -20px 18px; background: repeating-linear-gradient(-45deg, var(--signal) 0 14px, var(--ink) 14px 28px); border-radius: 4px 4px 0 0; }
+
+/* Buttons */
+.choices { display: grid; gap: 10px; margin-top: 18px; }
+.btn {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  background: var(--card); border: 2px solid var(--ink); border-radius: 4px;
+  padding: 14px 16px; min-height: 52px; font-weight: 600;
+}
+.btn:hover { background: var(--signal); }
+.btn.primary { background: var(--ink); color: #fff; text-align: center; font-weight: 700; }
+.btn.primary:hover { background: #2a343d; }
+.btn[disabled] { cursor: default; }
+.level-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.level-row .btn { text-align: center; font-size: 1.15rem; font-weight: 800; padding: 18px 10px; }
+.level-row small { display: block; font-weight: 500; font-size: 0.85rem; color: var(--steel); margin-top: 2px; }
+.level-row .btn:hover small { color: var(--ink); }
+
+/* Question */
+.topic { display: inline-block; font-size: 0.85rem; font-weight: 700; background: var(--signal); color: var(--ink); padding: 2px 9px; border-radius: 2px; margin-bottom: 12px; }
+.setup { font-family: var(--story); font-style: italic; color: #2c363e; margin: 0 0 16px; max-width: 62ch; }
+.qtext { font-size: 1.2rem; font-weight: 700; line-height: 1.4; margin: 0 0 14px; max-width: 60ch; }
+.opts { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.opt { display: flex; gap: 12px; align-items: flex-start; }
+.opt .key { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: #fff; font-weight: 700; font-size: 0.9rem; display: grid; place-items: center; margin-top: 1px; }
+.btn.right { background: var(--green-bg); border-color: var(--green); }
+.btn.right .key { background: var(--green); }
+.btn.wrong { background: var(--red-bg); border-color: var(--red); }
+.btn.wrong .key { background: var(--red); }
+.btn.dim { opacity: .55; }
+table.data { border-collapse: collapse; margin: 0 0 14px; font-size: 0.98rem; }
+table.data th, table.data td { border: 1px solid var(--line); padding: 5px 12px; text-align: left; }
+table.data th { background: #eef1f3; }
+
+/* Feedback */
+.feedback { margin-top: 18px; padding: 16px; border-left: 6px solid var(--green); background: var(--green-bg); }
+.feedback.bad { border-left-color: var(--red); background: var(--red-bg); }
+.feedback h3 { margin: 0 0 6px; font-size: 1.15rem; }
+.feedback p { margin: 0 0 10px; }
+.feedback .beat { font-family: var(--story); font-style: italic; }
+.feedback .dose-line { font-weight: 800; margin: 0; }
+.feedback.bad .dose-line { color: var(--red); }
+.feedback.good .dose-line { color: var(--green); }
+.feedback + .btn { margin-top: 14px; }
+
+/* End screen */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 18px 0; }
+.stat { border: 2px solid var(--ink); border-radius: 4px; padding: 10px; }
+.stat b { display: block; font-size: 1.6rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.85rem; color: var(--steel); }
+.revise { margin: 0 0 18px; padding-left: 20px; }
+.log { list-style: none; margin: 0 0 20px; padding: 0; border-top: 1px solid var(--line); }
+.log li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.95rem; }
+.log .tick { color: var(--green); font-weight: 800; }
+.log .cross { color: var(--red); font-weight: 800; }
+.end-actions { display: grid; gap: 10px; }
+.note { font-size: 0.9rem; color: var(--steel); margin-top: 16px; }
+
+@media (max-width: 480px) {
+  body { font-size: 16px; }
+  h1 { font-size: 2.1rem; }
+  h2 { font-size: 1.45rem; }
+  .stats { grid-template-columns: 1fr 1fr 1fr; }
+  .stat b { font-size: 1.3rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gauge-fill { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="hud" id="hud" hidden>
+  <div class="hud-inner">
+    <div class="hud-row">
+      <div class="hud-dose" id="doseText" aria-live="polite">0 mSv <small>of 20 mSv annual limit</small></div>
+      <div class="hud-meta"><span id="lvlText"></span> &nbsp;|&nbsp; <span id="progText"></span><button type="button" id="restartBtn">Restart</button></div>
+    </div>
+    <div class="gauge" id="gauge" role="img" aria-label="Dose received so far">
+      <div class="gauge-fill" id="gaugeFill"></div>
+      <div class="ticks"><i style="left:25%"></i><i style="left:50%"></i><i style="left:75%"></i></div>
+    </div>
+    <div class="scale" aria-hidden="true"><span style="left:0">0</span><span style="left:25%">5</span><span style="left:50%">10</span><span style="left:75%">15</span><span style="left:100%">20 mSv</span></div>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<!-- ============================================================
+     STORY AND QUESTIONS
+     To edit: change the text inside the backticks. In each mc(...)
+     the FIRST answer is always the correct one. Answers are shuffled
+     when the game runs. Use <sub></sub> for subscripts.
+     ============================================================ -->
+<script id="story-data">
+const mc = (q, right, wrong, why) => ({ q, right, wrong, why });
+const both = x => ({ n5: x, n4: x });
+
+const STORY = {
+  limit: 20,
+
+  endings: {
+    great: {
+      title: `Textbook shift`,
+      text: `You walk out through the contamination monitor and it stays silent. Morag checks your dosimeter and raises an eyebrow. “First week, a reactor trip, and that reading? I have colleagues with ten years on site who could not manage that.” You have been an excellent radiation worker.`
+    },
+    good: {
+      title: `Safe and sound`,
+      text: `The contamination monitor stays quiet and the dosimeter is read and logged. It was a hard day with plenty of exposure, but you stayed within your limit and the incident team thanks you. Morag signs your induction form with a flourish.`
+    },
+    close: {
+      title: `Under the limit, just`,
+      text: `The dosimeter reads very close to 20 mSv. Morag checks it twice before she lets out a long breath. You stayed within the limit, but the safety officer wants a word about how close it was. Next time, revise a little harder before the siren goes off.`
+    },
+    fail: {
+      title: `Dose limit exceeded`,
+      text: `Your dosimeter sounds a continuous tone. You have passed 20 mSv for the year. Priya takes you off the job on the spot and sends you to the medical bay for a check-up. You are stood down from radiation work for the rest of the year, and the incident carries on without you.`
+    }
+  },
+
+  nodes: {
+
+    /* ---------- Stage 1 ---------- */
+    s1: { type: 'scene', kicker: `Day one, 07:40`, title: `Carrick Ness`,
+      text: [
+        `Rain hammers the car park at Carrick Ness Power Station. Your induction officer, Morag, hands you a lanyard and a grey, badge-sized device.`,
+        `“Your dosimeter. Your annual limit is 20 millisieverts, and I would rather you did not use it all in week one.” She points two ways: the induction briefing room, and the dosimeter issue desk.`
+      ],
+      choices: [
+        { label: `Go to the induction briefing`, goto: 'q1a' },
+        { label: `Collect and check your dosimeter first`, goto: 'q1b' }
+      ] },
+    q1a: { type: 'q', topic: `Types of radiation`, cost: 2, next: 's2',
+      setup: `The briefing room smells of coffee and floor polish. A slide on the wall reads: Know what you are dealing with.`,
+      q: both(mc(`Which type of nuclear radiation is the most strongly ionising?`,
+        `Alpha`, [`Beta`, `Gamma`, `They are all equally ionising`, `Beta and gamma are equally the most ionising`],
+        `Alpha particles are heavy and carry a positive charge, so they ionise a lot of atoms in a very short distance. Alpha is the most ionising but the least penetrating.`)),
+      ok: `Morag nods. “Good. Remember that, it matters later.”`,
+      bad: `Morag winces and steers you away from a demonstration source. Too late: your dosimeter has already ticked up.` },
+    q1b: { type: 'q', topic: `Dosimetry`, cost: 2, next: 's2',
+      setup: `The clerk clips the dosimeter to your lapel and zeroes it. “Wear it every time you enter a controlled area,” she says.`,
+      q: {
+        n5: mc(`What does a radiation worker's dosimeter record?`,
+          `The equivalent dose they have received`, [`The activity of a source`, `The half-life of a source`, `The count rate in the room`, `The type of radiation that was emitted`],
+          `A dosimeter records the equivalent dose the wearer has received, measured in sieverts (usually millisieverts).`),
+        n4: mc(`Why do radiation workers wear a dosimeter badge?`,
+          `To record how much radiation they have been exposed to`, [`To make the radiation weaker`, `To stop alpha particles reaching them`, `To tell them what type of radiation is present`, `To measure how radioactive a source is`],
+          `A dosimeter does not protect you. It records your exposure so that it can be checked against your dose limit.`)
+      },
+      ok: `“Good,” says the clerk. “Hand it in for reading at the end of every month.”`,
+      bad: `The clerk shakes her head and sends you through a doorway marked “Active area” to fetch the right form. Your dosimeter registers the detour.` },
+
+    /* ---------- Stage 2 ---------- */
+    s2: { type: 'scene', kicker: `Day one, 09:15`, title: `The source store`,
+      text: [
+        `Your first task: help Callum from Maintenance check the sealed source store on Level 2. The heavy door is stencilled with a radiation trefoil.`,
+        `Callum has two jobs lined up and only one pair of hands to spare.`
+      ],
+      choices: [
+        { label: `Inspect the beta source used to check foil thickness`, goto: 'q2a' },
+        { label: `Help move the gamma source into its lead-lined store`, goto: 'q2b' }
+      ] },
+    q2a: { type: 'q', topic: `Shielding`, cost: 3, next: 's3',
+      setup: `Callum slides a small tray from the cabinet. “Beta emitter,” he says. “Needs the right screen in front of it when it is out.”`,
+      q: both(mc(`Which of these would stop beta particles?`,
+        `A few millimetres of aluminium`, [`A sheet of paper`, `A sheet of tissue paper`, `A few centimetres of air`, `A thin layer of cotton cloth`],
+        `Alpha is stopped by paper, beta needs a few millimetres of aluminium, and gamma is only reduced by thick lead or concrete.`)),
+      ok: `Callum slots a thin aluminium screen in place and gives you a thumbs up.`,
+      bad: `Callum yanks the tray back with a muttered curse. “Wrong screen.” A brief burst of beta reaches you.` },
+    q2b: { type: 'q', topic: `Shielding`, cost: 3, next: 's3',
+      setup: `The gamma source sits in a transit canister. Callum taps the empty store beside it. “Which shield goes round this one?”`,
+      q: both(mc(`Which of these is the best shield against gamma radiation?`,
+        `Thick lead`, [`A sheet of paper`, `A few millimetres of aluminium`, `A sheet of glass`, `A thin sheet of plastic`],
+        `Gamma rays are very penetrating. They are never completely stopped, but thick dense materials such as lead or concrete reduce them the most.`)),
+      ok: `The canister goes into the thick-walled store with a satisfying clunk.`,
+      bad: `The canister is half-shielded for a minute too long. Your dosimeter clicks upward.` },
+
+    /* ---------- Stage 3 ---------- */
+    s3: { type: 'scene', kicker: `Day one, 11:30`, title: `Alarms in the corridor`,
+      text: [
+        `A radiation monitor on Level 3 is reading higher than it should. Priya, the health physicist, hands you a Geiger counter and a stopwatch.`,
+        `“Get me proper numbers,” she says. “Not a guess.”`
+      ],
+      choices: [
+        { label: `Measure the count from the pipe`, goto: 'q3a' },
+        { label: `Check the natural background first`, goto: 'q3b' }
+      ] },
+    q3a: { type: 'q', topic: `Activity`, cost: 3, next: 's4',
+      setup: `You hold the tube beside the pipe joint and time it carefully.`,
+      q: {
+        n5: mc(`A sample emits 4800 decays in 2 minutes. What is its activity?`,
+          `40 Bq`, [`2400 Bq`, `9600 Bq`, `0.025 Bq`, `4800 Bq`],
+          `Activity A = N/t. Time must be in seconds: 2 minutes = 120 s. A = 4800 / 120 = 40 Bq.`),
+        n4: mc(`Activity is measured in becquerels. One becquerel is equal to:`,
+          `One decay per second`, [`One decay per minute`, `One joule per kilogram`, `One count per hour`, `One sievert per hour`],
+          `Activity is the number of decays each second. One becquerel is one decay per second.`)
+      },
+      ok: `Priya checks your figure against her own and nods. “That matches.”`,
+      bad: `Your figure is well off. Priya re-runs the check herself and you spend longer than you should by the joint.` },
+    q3b: { type: 'q', topic: `Background radiation`, cost: 3, next: 's4',
+      setup: `You step away from the pipe and take a reading in the middle of the canteen. It is low, but not zero.`,
+      q: both(mc(`Which of these is a source of natural background radiation?`,
+        `Radon gas from rocks and soil`, [`X-rays at a hospital`, `Fallout from nuclear weapons tests`, `Waste from industry`, `Smoke detectors in the building`],
+        `Natural sources include radon gas, cosmic rays and radioactive rock. X-rays, weapons fallout and industrial waste are artificial sources.`)),
+      ok: `“Good,” says Priya. “Subtract that from every reading and you will not be fooled.”`,
+      bad: `You mislabel the reading and Priya sends you back to re-do the whole survey. More time in the corridor means more dose.` },
+
+    /* ---------- Stage 4 ---------- */
+    s4: { type: 'scene', kicker: `Day one, 13:45`, title: `The incident log`,
+      text: [
+        `After lunch, Priya pulls up an incident log from last month: staff exposed during a valve inspection.`,
+        `“Work out what they received,” she says. “Show me you can use the numbers.”`
+      ],
+      choices: [
+        { label: `Look at the technician who handled the alpha-contaminated filter`, goto: 'q4a' },
+        { label: `Look at the technician exposed to gamma radiation`, goto: 'q4b' }
+      ] },
+    q4a: { type: 'q', topic: `Equivalent dose`, cost: 4, next: 's5',
+      setup: `The log shows a filter cartridge that was left open and a technician who breathed in dust from it.`,
+      q: {
+        n5: mc(`A worker's tissue absorbs 0.30 mGy of alpha radiation (radiation weighting factor 20). What is the equivalent dose?`,
+          `6 mSv`, [`0.015 mSv`, `0.30 mSv`, `20.3 mSv`, `6 Sv`],
+          `H = D w<sub>R</sub> = 0.30 mGy × 20 = 6 mSv. The weighting factor is large for alpha because it does much more biological damage for the same absorbed dose.`),
+        n4: mc(`An alpha source gets inside the body. Why is this so dangerous?`,
+          `Alpha is very ionising and all its energy is absorbed by nearby tissue`, [`Alpha is very penetrating`, `Alpha is an electromagnetic wave`, `Alpha has a very long half-life`, `Alpha travels a long way through tissue`],
+          `Alpha particles cannot get through skin, but inside the body all their energy is absorbed in a tiny region of tissue, causing a lot of ionisation.`)
+      },
+      ok: `Priya taps the screen. “Exactly. That is why we do not breathe dust in this building.”`,
+      bad: `You fumble the answer in front of the incident team and are sent to re-check the filter bay. The air in there is not clean.` },
+    q4b: { type: 'q', topic: `Absorbed dose`, cost: 4, next: 's5',
+      setup: `The log shows a technician standing beside an unshielded valve for far too long.`,
+      q: {
+        n5: mc(`A technician's tissue of mass 2.0 kg absorbs 0.0040 J of gamma energy. What is the absorbed dose?`,
+          `0.0020 Gy`, [`0.0080 Gy`, `0.020 Gy`, `500 Gy`, `0.0020 Sv`],
+          `D = E/m = 0.0040 J / 2.0 kg = 0.0020 Gy (2.0 mGy).`),
+        n4: mc(`What is the unit of equivalent dose?`,
+          `Sievert (Sv)`, [`Becquerel (Bq)`, `Hertz (Hz)`, `Joule (J)`, `Gray (Gy)`],
+          `Equivalent dose is measured in sieverts. Becquerels are used for activity.`)
+      },
+      ok: `“Right,” says Priya. “Now you can read a dose record.”`,
+      bad: `Priya sighs and takes you back to the valve itself to “see it properly”. Your dosimeter notes the visit.` },
+
+    /* ---------- Stage 5 ---------- */
+    s5: { type: 'scene', kicker: `Day one, 15:10`, title: `Reactor trip`,
+      text: [
+        `At 15:10 a pump seal fails in the secondary circuit. A siren winds up. Over the tannoy: “Reactor trip. All non-essential personnel to the assembly point.”`,
+        `Priya grabs your sleeve. “Samples from the leak are in the lab. We need to know how long this stays hot.”`
+      ],
+      choices: [
+        { label: `Test the fresh sample from the leaked pipe`, goto: 'q5a' },
+        { label: `Check the older sample from the waste store`, goto: 'q5b' }
+      ] },
+    q5a: { type: 'q', topic: `Half-life`, cost: 4, next: 's6',
+      setup: `You carry the sample into the lab as the lights flicker and switch to emergency power.`,
+      q: {
+        n5: mc(`A coolant sample has an activity of 640 kBq and a half-life of 8 days. What is its activity after 24 days?`,
+          `80 kBq`, [`213 kBq`, `160 kBq`, `320 kBq`, `40 kBq`],
+          `24 days is 3 half-lives. 640 → 320 → 160 → 80 kBq.`),
+        n4: mc(`What does the half-life of a radioactive source mean?`,
+          `The time taken for its activity to halve`, [`Half of the time it stays radioactive`, `The time taken for it to become completely safe`, `Half the distance at which it is safe`, `The time taken for the count rate to fall to zero`],
+          `Half-life is the time for the activity of a source to fall to half of its original value.`)
+      },
+      ok: `“Right, so we have days, not hours,” says Priya, relieved.`,
+      bad: `Your estimate is off and the team plans the clean-up badly. You are sent back in to re-measure. The lab is not shielded.` },
+    q5b: { type: 'q', topic: `Half-life`, cost: 4, next: 's6',
+      setup: `In the waste store, a logbook shows how the old sample has decayed over time.`,
+      q: {
+        n5: mc(`The activity of a sample falls from 1200 Bq to 150 Bq in 30 minutes. What is its half-life?`,
+          `10 minutes`, [`15 minutes`, `30 minutes`, `7.5 minutes`, `20 minutes`],
+          `1200 → 600 → 300 → 150 Bq is 3 half-lives. 30 min / 3 = 10 minutes.`),
+        n4: mc(`The activity of a source falls from 800 Bq to 400 Bq in 6 hours. What is its half-life?`,
+          `6 hours`, [`3 hours`, `12 hours`, `1 hour`, `2 hours`],
+          `The activity has halved once in 6 hours, so the half-life is 6 hours.`)
+      },
+      ok: `“Good. That fits the pattern we expected,” Priya says into her radio.`,
+      bad: `You misread the log and the handover to the next shift is wrong. You are sent to the store again to sort it out.` },
+
+    /* ---------- Stage 6 ---------- */
+    s6: { type: 'scene', kicker: `Day one, 15:40`, title: `Control room`,
+      text: [
+        `Panels flash amber. The reactor has tripped, but Director Fraser wants every safety system confirmed before anyone goes near the core.`,
+        `“Two things to check,” she says. “Quickly.”`
+      ],
+      choices: [
+        { label: `Confirm the control rods are fully inserted`, goto: 'q6a' },
+        { label: `Check that the chain reaction has really stopped`, goto: 'q6b' }
+      ] },
+    q6a: { type: 'q', topic: `Nuclear fission`, cost: 5, next: 's7',
+      setup: `The display shows each rod as a slim blue bar sinking into the core.`,
+      q: both(mc(`What do control rods do in a fission reactor?`,
+        `Absorb neutrons to slow or stop the chain reaction`, [`Release extra neutrons to speed up the reaction`, `Shield workers from gamma radiation`, `Turn water into steam`, `Hold the fuel in position`],
+        `Control rods absorb neutrons. Pushing them in absorbs more neutrons, so fewer fissions happen and the chain reaction slows or stops.`)),
+      ok: `“Rods in. Reaction stopped,” you report. Fraser exhales.`,
+      bad: `You hesitate over what the rods actually do and Fraser sends you down to the reactor hall to check them by eye. A lot of exposure follows.` },
+    q6b: { type: 'q', topic: `Nuclear fission`, cost: 5, next: 's7',
+      setup: `Instruments around the core show falling neutron counts.`,
+      q: both(mc(`In nuclear fission, what keeps the chain reaction going?`,
+        `Neutrons released by one fission cause further fissions`, [`Alpha particles split the next nucleus`, `Electrons from the outer atoms hit the fuel`, `Heat from the coolant splits the nuclei`, `Protons released from the fuel`],
+        `Each fission releases neutrons. If those neutrons strike other large nuclei, they split too, releasing more neutrons. This is a chain reaction.`)),
+      ok: `“Neutron count falling,” you confirm. “The chain has broken.”`,
+      bad: `Your reading of the neutron data is wrong and Fraser sends you down to the core hall to check it by hand.` },
+
+    /* ---------- Stage 7 ---------- */
+    s7: { type: 'scene', kicker: `Day one, 16:20`, title: `Waiting for the all-clear`,
+      text: [
+        `While the core is cooling, Iain from Operations has a cut hand and breathed in a lot of dust. Dr Okafor in the medical bay needs help.`,
+        `Elsewhere, an instrument technician is trying to repair a damaged gauge on the foil line.`
+      ],
+      choices: [
+        { label: `Help Dr Okafor prepare a medical tracer scan`, goto: 'q7a' },
+        { label: `Help the technician repair the foil thickness gauge`, goto: 'q7b' }
+      ] },
+    q7a: { type: 'q', topic: `Uses of radiation`, cost: 3, next: 's8',
+      setup: `Dr Okafor holds up two vials. “Which one do I use to track where the dust went?”`,
+      q: both(mc(`Which source is best for a medical tracer injected into a patient?`,
+        `A gamma emitter with a short half-life`, [`An alpha emitter with a short half-life`, `A gamma emitter with a very long half-life`, `A beta emitter with a long half-life`, `A beta emitter with a short half-life`],
+        `Gamma passes out of the body so it can be detected outside. A short half-life means the activity drops quickly, which limits the patient's dose.`)),
+      ok: `The scan runs smoothly and Iain is cleared by the end of the hour.`,
+      bad: `Dr Okafor catches the mistake just in time, but the vial has been out in the open for too long.` },
+    q7b: { type: 'q', topic: `Uses of radiation`, cost: 3, next: 's8',
+      setup: `The gauge sits beside a moving sheet of aluminium foil. Radiation passes through the foil to a detector, so any thickness change shows on the screen.`,
+      q: both(mc(`Which type of radiation is best for checking the thickness of aluminium foil?`,
+        `Beta`, [`Alpha`, `Gamma`, `Alpha and gamma together`, `Any type, they all work equally well`],
+        `Alpha is stopped by the foil completely, and gamma passes through almost unaffected, so neither would show small changes. Beta is partly absorbed, so the count changes when the thickness changes.`)),
+      ok: `The gauge is back online and the foil line restarts.`,
+      bad: `The wrong source is fitted and the gauge reads nonsense. Fixing it takes time beside the source.` },
+
+    /* ---------- Stage 8 ---------- */
+    s8: { type: 'scene', kicker: `Day one, 17:00`, title: `Corridor C`,
+      text: [
+        `The cooling lines on Level 1 must be isolated before shift change. The only route is through Corridor C, where dose rates are elevated.`,
+        `Priya hands you a handheld monitor. “Know your numbers before you walk in.”`
+      ],
+      choices: [
+        { label: `Plan the route through Corridor C`, goto: 'q8a' },
+        { label: `Plan the isolation task at the valve`, goto: 'q8b' }
+      ] },
+    q8a: { type: 'q', topic: `Equivalent dose rate`, cost: 4, next: 's9',
+      setup: `You study the corridor map on the monitor. The readings are in microsieverts per hour.`,
+      q: {
+        n5: mc(`In Corridor C the equivalent dose rate is 120 µSv/h. You spend 30 minutes there. What equivalent dose do you receive?`,
+          `60 µSv`, [`240 µSv`, `3600 µSv`, `4 µSv`, `120 µSv`],
+          `H = Ḣ t. 30 minutes = 0.5 h, so H = 120 × 0.5 = 60 µSv.`),
+        n4: mc(`Which of these will reduce the dose you receive from a source?`,
+          `Spending less time near it`, [`Standing closer to it`, `Taking off protective clothing`, `Holding it in your bare hands`, `Staying near it for longer`],
+          `To reduce dose: spend less time near the source, stay further away, and use shielding.`)
+      },
+      ok: `You pass through quickly and the monitor stays within the plan.`,
+      bad: `Your plan keeps you in the corridor too long and the dose rate takes its toll.` },
+    q8b: { type: 'q', topic: `Equivalent dose rate`, cost: 4, next: 's9',
+      setup: `The valve is in a small cell where the dose rate is high. Priya tells you the limit set for this job.`,
+      q: {
+        n5: mc(`At the valve the equivalent dose rate is 5.0 mSv/h. You must not receive more than 2.0 mSv. What is the longest you can stay?`,
+          `24 minutes`, [`2.5 hours`, `40 minutes`, `10 minutes`, `0.4 minutes`],
+          `t = H / Ḣ = 2.0 / 5.0 = 0.40 h = 24 minutes.`),
+        n4: mc(`Which is the best way to protect yourself when working near a gamma source?`,
+          `Use thick lead shielding and spend as little time as possible near it`, [`Wear thin plastic gloves`, `Put a sheet of paper in front of it`, `Stand as close as possible so the job is quicker`, `Wear a thick wool jumper`],
+          `Gamma is very penetrating. Thick dense shielding, distance and short exposure times all reduce dose. Paper and gloves do almost nothing.`)
+      },
+      ok: `You close the valve, clip out, and are in the clear with minutes to spare.`,
+      bad: `You overrun your time at the valve. Your dosimeter alarm chirps a warning.` },
+
+    /* ---------- Stage 9 ---------- */
+    s9: { type: 'scene', kicker: `Day one, 17:45`, title: `Dust on your boots`,
+      text: [
+        `A pipe joint fails as you head out. A fine grey dust settles on your boots and sleeves. Priya's monitor screams.`,
+        `“You are contaminated. Decon corridor, now, or deal with the source first.”`
+      ],
+      choices: [
+        { label: `Go straight to the decontamination shower`, goto: 'q9a' },
+        { label: `Bag the leaking source with long tongs first`, goto: 'q9b' }
+      ] },
+    q9a: { type: 'q', topic: `Contamination and irradiation`, cost: 4, next: 's10',
+      setup: `The nurse at the decontamination station is calm. “Do you know what has actually happened to you?”`,
+      q: both(mc(`What is the difference between contamination and irradiation?`,
+        `Contamination is radioactive material on or in you; irradiation is exposure to radiation from outside the body`,
+        [`Contamination is exposure from outside the body; irradiation is radioactive material on you`, `Irradiation makes an object radioactive; contamination does not`, `There is no difference`, `Contamination only happens with alpha; irradiation only happens with gamma`],
+        `Contamination means radioactive material is on or inside you. Irradiation means you are exposed to radiation from a source outside you. Irradiating something does not make it radioactive.`)),
+      ok: `“Right. So we remove the dust and you are done,” she says, and starts the shower.`,
+      bad: `You mix up the two and delay getting clean. The dust on your boots keeps irradiating you.` },
+    q9b: { type: 'q', topic: `Reducing exposure`, cost: 4, next: 's10',
+      setup: `Long steel tongs hang by the pipe. You lift the loose source into a container, arms fully outstretched.`,
+      q: both(mc(`Why are long tongs used to handle a radioactive source?`,
+        `Increasing the distance reduces the dose rate`, [`The tongs absorb the gamma rays`, `The tongs reduce the activity of the source`, `The tongs stop the source decaying`, `The tongs are made of lead`],
+        `The further you are from a source, the lower the dose rate. Tongs do not shield you and they cannot change the activity of the source.`)),
+      ok: `The source is bagged and sealed. Priya gives you a nod and a towel.`,
+      bad: `You reach in with a short grip and take a larger dose than you should have.` },
+
+    /* ---------- Stage 10 ---------- */
+    s10: { type: 'scene', kicker: `Day one, 18:30`, title: `The mystery sample`,
+      text: [
+        `Among the debris you find a cracked, unlabelled container. Fraser's voice crackles on your radio: “Do not touch it. Work out what it emits.”`
+      ],
+      choices: [
+        { label: `Test it with absorbers and a Geiger counter`, goto: 'q10a' },
+        { label: `Test how far its radiation travels in air`, goto: 'q10b' }
+      ] },
+    q10a: { type: 'q', topic: `Identifying radiation`, cost: 5, next: 's11',
+      setup: `You set up the Geiger counter and place absorbers between it and the container one at a time.`,
+      q: {
+        n5: mc(`The background count rate is 40 counts per minute. The results are shown below. What does the sample emit?
+          <table class="data"><tr><th>Absorber</th><th>Count rate (per min)</th></tr><tr><td>None</td><td>520</td></tr><tr><td>Paper</td><td>515</td></tr><tr><td>3 mm aluminium</td><td>45</td></tr><tr><td>5 cm lead</td><td>42</td></tr></table>`,
+          `Beta only`, [`Alpha only`, `Gamma only`, `Alpha and gamma`, `Beta and gamma`],
+          `Paper makes almost no difference, so there is no alpha. 3 mm of aluminium brings the count down to roughly background, so the radiation is beta. Lead has no further effect, so there is no gamma.`),
+        n4: mc(`The radiation from a source is completely stopped by a sheet of paper. Which type is it?`,
+          `Alpha`, [`Beta`, `Gamma`, `None of these`, `X-rays`],
+          `Alpha particles are stopped by a sheet of paper. Beta needs aluminium and gamma needs thick lead.`)
+      },
+      ok: `“Identified,” says Fraser. “Now we know what shielding to use.”`,
+      bad: `You misidentify the sample and a team is sent in with the wrong protection. Your own dose rises as you stay to correct it.` },
+    q10b: { type: 'q', topic: `Identifying radiation`, cost: 5, next: 's11',
+      setup: `You test the container with the detector held at different distances.`,
+      q: {
+        n5: mc(`A detector 20 cm from the sample counts nothing above background, but counts rise sharply at 3 cm. What does the sample emit?`,
+          `Alpha`, [`Gamma`, `Beta`, `Gamma and beta`, `Alpha and beta`],
+          `Alpha particles travel only a few centimetres in air. Beta and gamma would still be detected at 20 cm.`),
+        n4: mc(`Which type of nuclear radiation is an electromagnetic wave?`,
+          `Gamma`, [`Alpha`, `Beta`, `All three`, `Neutrons`],
+          `Gamma is an electromagnetic wave. Alpha is a particle (a helium nucleus) and beta is a fast-moving electron.`)
+      },
+      ok: `“Good work,” says Fraser. “That narrows it down. Keep it sealed and keep your distance.”`,
+      bad: `Your result does not fit. You are sent back in to re-test, closer to the container than anyone would like.` },
+
+    /* ---------- Stage 11 ---------- */
+    s11: { type: 'scene', kicker: `Day one, 19:20`, title: `Evacuation`,
+      text: [
+        `Fraser orders a full withdrawal to the muster point. Stairwell 4 is clear, but your dosimeter reading is climbing and Priya is logging every exposure.`,
+        `“We need an accurate record,” she says. “Work out what each part of the incident cost.”`
+      ],
+      choices: [
+        { label: `Assess the neutron exposure in the reactor hall`, goto: 'q11a' },
+        { label: `Assess the mixed exposure in the stairwell`, goto: 'q11b' }
+      ] },
+    q11a: { type: 'q', topic: `Equivalent dose`, cost: 5, next: 's12',
+      setup: `Priya hands you the reading from the hall: a short burst of neutrons.`,
+      q: {
+        n5: mc(`A worker's tissue absorbs 0.40 mGy of fast neutrons (radiation weighting factor 10). What is the equivalent dose?`,
+          `4.0 mSv`, [`0.040 mSv`, `0.40 mSv`, `40 mSv`, `4.0 Sv`],
+          `H = D w<sub>R</sub> = 0.40 mGy × 10 = 4.0 mSv.`),
+        n4: mc(`What can happen when ionising radiation passes through living cells?`,
+          `The cells can be damaged or killed, or become cancerous`, [`The cells become stronger`, `The cells become radioactive permanently`, `Nothing happens`, `The cells are always killed immediately`],
+          `Ionising radiation can damage cells. Damage to DNA can kill cells or lead to cancer. It does not make cells radioactive.`)
+      },
+      ok: `You finish the record and the team uses it to plan their next steps.`,
+      bad: `Your record is wrong and Priya sends you back into the hall to get a second reading.` },
+    q11b: { type: 'q', topic: `Equivalent dose`, cost: 5, next: 's12',
+      setup: `The stairwell record shows a mix of radiations. Priya wants the combined figure.`,
+      q: {
+        n5: mc(`A worker absorbs 2.0 mGy of gamma (w<sub>R</sub> = 1) and 0.10 mGy of alpha (w<sub>R</sub> = 20). What is the total equivalent dose?`,
+          `4.0 mSv`, [`2.1 mSv`, `2.0 mSv`, `40 mSv`, `22 mSv`],
+          `Gamma: 2.0 × 1 = 2.0 mSv. Alpha: 0.10 × 20 = 2.0 mSv. Total = 4.0 mSv. Always apply the weighting factor to each type before adding.`),
+        n4: mc(`A radioactive source is held outside the body. Which type of radiation is most likely to reach the internal organs?`,
+          `Gamma`, [`Alpha`, `Beta`, `None of them`, `Alpha and beta equally`],
+          `Gamma is the most penetrating. Alpha is stopped by skin and beta is stopped by a few millimetres of material.`)
+      },
+      ok: `Priya enters the figure with a nod. “That is the record we need.”`,
+      bad: `The totals do not add up. Priya sends you back to the stairwell to re-measure.` },
+
+    /* ---------- Stage 12 ---------- */
+    s12: { type: 'scene', kicker: `Day one, 21:05`, title: `Stable`,
+      text: [
+        `By evening the reactor is cold and stable. The siren has gone quiet. One task left: help draft the incident summary for the Director.`,
+        `Two sections need checking before it goes up.`
+      ],
+      choices: [
+        { label: `Check the section on future energy options`, goto: 'q12a' },
+        { label: `Check the section on waste from the incident`, goto: 'q12b' }
+      ] },
+    q12a: { type: 'q', topic: `Fission and fusion`, cost: 4, next: 'END',
+      setup: `The draft compares today's fission reactors with experimental fusion plants.`,
+      q: both(mc(`Which statement describes nuclear fusion?`,
+        `Two small nuclei join to form a larger nucleus, releasing energy`, [`A large nucleus splits into two smaller nuclei, releasing energy`, `A nucleus absorbs a neutron and becomes stable`, `A nucleus emits an alpha particle`, `Two large nuclei collide and both are destroyed`],
+        `Fusion is the joining of small nuclei. Splitting a large nucleus is fission.`)),
+      ok: `The section is corrected and the report moves on.`,
+      bad: `The error in the draft slips through and you are called back to the control room to correct it.` },
+    q12b: { type: 'q', topic: `Radioactive waste`, cost: 4, next: 'END',
+      setup: `The waste section mentions that some of it must be stored for thousands of years.`,
+      q: both(mc(`Why does some high-level nuclear waste stay hazardous for thousands of years?`,
+        `Some of the isotopes in it have very long half-lives`, [`Its activity increases over time`, `Isotopes with short half-lives decay more slowly`, `The storage container makes it radioactive`, `It is stored underground so it cannot decay`],
+        `A long half-life means the activity falls very slowly, so the waste remains radioactive for a very long time.`)),
+      ok: `The Director approves the wording without a single change.`,
+      bad: `A mistake in the waste section is spotted at the last minute. You are called to the store to check the figures.` }
+  }
+};
+</script>
+
+<!-- ============================================================
+     GAME LOGIC (no need to edit below this line)
+     ============================================================ -->
+<script>
+(function () {
+  const LIMIT = STORY.limit;
+  const NODES = STORY.nodes;
+  const STAGES = Object.values(NODES).filter(n => n.type === 'scene').length;
+
+  const app = document.getElementById('app');
+  const hud = document.getElementById('hud');
+  const gauge = document.getElementById('gauge');
+  const fill = document.getElementById('gaugeFill');
+  const doseText = document.getElementById('doseText');
+  const lvlText = document.getElementById('lvlText');
+  const progText = document.getElementById('progText');
+
+  let S;
+  let activeQ = null;
+
+  function freshState() {
+    return { level: null, dose: 0, asked: 0, correct: 0, log: [] };
+  }
+
+  function shuffle(a) {
+    const arr = a.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function updateHud() {
+    const pct = Math.min(S.dose / LIMIT, 1) * 100;
+    fill.style.width = pct + '%';
+    gauge.classList.remove('amber', 'red', 'over');
+    if (S.dose > LIMIT) gauge.classList.add('over');
+    else if (S.dose > 0.75 * LIMIT) gauge.classList.add('red');
+    else if (S.dose > 0.5 * LIMIT) gauge.classList.add('amber');
+    doseText.innerHTML = S.dose + ' mSv <small>of ' + LIMIT + ' mSv annual limit</small>';
+    gauge.setAttribute('aria-label', 'Dose received so far: ' + S.dose + ' of ' + LIMIT + ' millisieverts');
+    lvlText.textContent = S.level === 'n5' ? 'National 5' : S.level === 'n4' ? 'National 4' : '';
+    progText.textContent = 'Answered ' + S.asked + ' of ' + STAGES;
+  }
+
+  function show(html, focusSel) {
+    app.innerHTML = html;
+    window.scrollTo(0, 0);
+    const el = app.querySelector(focusSel || 'h1, h2');
+    if (el) { el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); }
+  }
+
+  /* ---------- Screens ---------- */
+  function renderIntro() {
+    S = freshState();
+    activeQ = null;
+    hud.hidden = true;
+    show(
+      '<section class="card"><div class="hazard"></div>' +
+      '<p class="kicker">Nuclear radiation | S4 Physics</p>' +
+      '<h1>Dose limit</h1>' +
+      '<p class="lead">You are a new radiation worker at Carrick Ness Power Station. Your annual dose limit is <b>20 mSv</b>.</p>' +
+      '<p class="lead">At each stage you choose where to go next. Each choice leads to a question. A wrong answer costs you an equivalent dose. Make it through the whole shift without going over your limit.</p>' +
+      '<p>Have your data sheet, formula sheet and calculator ready.</p>' +
+      '<h2 style="font-size:1.2rem;margin-top:22px">Choose your level</h2>' +
+      '<div class="level-row">' +
+      '<button class="btn" data-level="n5">National 5<small>Includes calculations</small></button>' +
+      '<button class="btn" data-level="n4">National 4<small>More conceptual</small></button>' +
+      '</div></section>'
+    );
+    app.querySelectorAll('[data-level]').forEach(b =>
+      b.addEventListener('click', () => start(b.dataset.level)));
+  }
+
+  function start(level) {
+    S = freshState();
+    S.level = level;
+    hud.hidden = false;
+    updateHud();
+    go('s1');
+  }
+
+  function go(id) {
+    const n = NODES[id];
+    if (n.type === 'scene') renderScene(n);
+    else renderQuestion(id, n);
+  }
+
+  function renderScene(n) {
+    activeQ = null;
+    show(
+      '<section class="card story">' +
+      '<p class="kicker">' + n.kicker + '</p>' +
+      '<h2>' + n.title + '</h2>' +
+      n.text.map(t => '<p>' + t + '</p>').join('') +
+      '<div class="choices">' +
+      n.choices.map((c, i) => '<button class="btn" data-goto="' + c.goto + '">' + c.label + '</button>').join('') +
+      '</div></section>'
+    );
+    app.querySelectorAll('[data-goto]').forEach(b =>
+      b.addEventListener('click', () => go(b.dataset.goto)));
+  }
+
+  function renderQuestion(id, n) {
+    const q = n.q[S.level];
+    const opts = shuffle([{ t: q.right, ok: true }].concat(q.wrong.map(w => ({ t: w, ok: false }))));
+    activeQ = { id, n, q, opts, answered: false };
+    const keys = ['A', 'B', 'C', 'D', 'E'];
+    show(
+      '<section class="card">' +
+      '<span class="topic">' + n.topic + '</span>' +
+      '<p class="setup">' + n.setup + '</p>' +
+      '<div class="qtext">' + q.q + '</div>' +
+      '<ol class="opts" id="opts">' +
+      opts.map((o, i) =>
+        '<li><button class="btn opt" data-i="' + i + '"><span class="key">' + keys[i] + '</span><span>' + o.t + '</span></button></li>'
+      ).join('') +
+      '</ol>' +
+      '<div id="fb" aria-live="polite"></div>' +
+      '</section>',
+      '.qtext'
+    );
+    app.querySelectorAll('.opt').forEach(b =>
+      b.addEventListener('click', () => answer(+b.dataset.i)));
+  }
+
+  function answer(i) {
+    if (!activeQ || activeQ.answered) return;
+    activeQ.answered = true;
+    const { n, q, opts } = activeQ;
+    const chosen = opts[i];
+    const correct = chosen.ok;
+
+    S.asked++;
+    if (correct) S.correct++; else S.dose += n.cost;
+    S.log.push({ topic: n.topic, ok: correct, cost: correct ? 0 : n.cost });
+
+    app.querySelectorAll('.opt').forEach((b, idx) => {
+      b.disabled = true;
+      if (opts[idx].ok) b.classList.add('right');
+      else if (idx === i) b.classList.add('wrong');
+      else b.classList.add('dim');
+    });
+
+    updateHud();
+
+    const over = S.dose > LIMIT;
+    const last = n.next === 'END';
+    const label = over ? 'See what happens' : last ? 'Finish the shift' : 'Continue';
+
+    document.getElementById('fb').innerHTML =
+      '<div class="feedback ' + (correct ? 'good' : 'bad') + '">' +
+      '<h3>' + (correct ? 'Correct' : 'Not quite') + '</h3>' +
+      '<p>' + q.why + '</p>' +
+      '<p class="beat">' + (correct ? n.ok : n.bad) + '</p>' +
+      '<p class="dose-line">' + (correct ? 'No dose received.' : 'Equivalent dose received: +' + n.cost + ' mSv') + '</p>' +
+      '</div>' +
+      '<button class="btn primary" id="next">' + label + '</button>';
+    const nextBtn = document.getElementById('next');
+    nextBtn.focus();
+    nextBtn.addEventListener('click', () => {
+      if (over) renderEnd(false);
+      else if (last) renderEnd(true);
+      else go(n.next);
+    });
+  }
+
+  function renderEnd(finished) {
+    activeQ = null;
+    let e;
+    if (!finished) e = STORY.endings.fail;
+    else if (S.dose <= 5) e = STORY.endings.great;
+    else if (S.dose <= 12) e = STORY.endings.good;
+    else e = STORY.endings.close;
+
+    const wrong = S.log.filter(l => !l.ok);
+    const topics = Array.from(new Set(wrong.map(l => l.topic)));
+
+    show(
+      '<section class="card story">' +
+      '<div class="hazard"></div>' +
+      '<p class="kicker">' + (finished ? 'End of shift' : 'Shift cut short') + '</p>' +
+      '<h2>' + e.title + '</h2>' +
+      '<p>' + e.text + '</p>' +
+      '<div class="stats">' +
+      '<div class="stat"><b>' + S.dose + '</b><span>mSv received</span></div>' +
+      '<div class="stat"><b>' + S.correct + '/' + S.asked + '</b><span>correct</span></div>' +
+      '<div class="stat"><b>' + (finished ? 'Yes' : 'No') + '</b><span>finished</span></div>' +
+      '</div>' +
+      (topics.length
+        ? '<h3 style="margin:0 0 6px">Topics to revise</h3><ul class="revise">' + topics.map(t => '<li>' + t + '</li>').join('') + '</ul>'
+        : '<p><b>No topics to revise. Every answer was correct.</b></p>') +
+      '<h3 style="margin:0 0 6px">Your answers</h3>' +
+      '<ul class="log">' + S.log.map((l, i) =>
+        '<li><span>' + (i + 1) + '. ' + l.topic + '</span><span class="' + (l.ok ? 'tick' : 'cross') + '">' +
+        (l.ok ? 'Correct' : 'Wrong, +' + l.cost + ' mSv') + '</span></li>').join('') + '</ul>' +
+      '<div class="end-actions">' +
+      '<button class="btn primary" id="again">Play again (same level)</button>' +
+      '<button class="btn" id="change">Back to the start</button>' +
+      '</div>' +
+      '<p class="note">Your route and questions change each time you choose different options. Nothing is saved or recorded.</p>' +
+      '</section>'
+    );
+    document.getElementById('again').addEventListener('click', () => start(S.level));
+    document.getElementById('change').addEventListener('click', renderIntro);
+  }
+
+  /* ---------- Controls ---------- */
+  document.getElementById('restartBtn').addEventListener('click', () => {
+    if (window.confirm('Restart from the beginning? Your dose so far will be lost.')) renderIntro();
+  });
+
+  document.addEventListener('keydown', ev => {
+    if (!activeQ || activeQ.answered) return;
+    const k = ev.key.toLowerCase();
+    const map = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, a: 0, b: 1, c: 2, d: 3, e: 4 };
+    if (k in map && map[k] < activeQ.opts.length) answer(map[k]);
+  });
+
+  renderIntro();
+})();
+</script>
+</body>
+</html>
